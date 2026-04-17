@@ -31,6 +31,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
+import { userCommandsListQueryOptions } from "~/lib/userCommandsReactQuery";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -704,6 +705,14 @@ export const ChatComposer = memo(
     );
     const workspaceEntries = workspaceEntriesQuery.data?.entries ?? EMPTY_PROJECT_ENTRIES;
 
+    const userCommandsQuery = useQuery(
+      userCommandsListQueryOptions({
+        environmentId,
+        enabled: composerTriggerKind === "slash-command",
+      }),
+    );
+    const userCommands = userCommandsQuery.data?.commands ?? [];
+
     const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
       if (!composerTrigger) return [];
       if (composerTrigger.kind === "path") {
@@ -739,6 +748,34 @@ export const ChatComposer = memo(
             label: "/default",
             description: "Switch this thread back to normal build mode",
           },
+          {
+            id: "slash:review",
+            type: "slash-command",
+            command: "review",
+            label: "/review",
+            description: "Request a code review of changes in this session",
+          },
+          {
+            id: "slash:compact",
+            type: "slash-command",
+            command: "compact",
+            label: "/compact",
+            description: "Summarize conversation and compress context",
+          },
+          {
+            id: "slash:init",
+            type: "slash-command",
+            command: "init",
+            label: "/init",
+            description: "Create or update CLAUDE.md with project instructions",
+          },
+          {
+            id: "slash:help",
+            type: "slash-command",
+            command: "help",
+            label: "/help",
+            description: "Show what the agent can do and available commands",
+          },
         ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
         const providerSlashCommandItems = (selectedProviderStatus?.slashCommands ?? []).map(
           (command) => ({
@@ -750,8 +787,27 @@ export const ChatComposer = memo(
             description: command.description ?? command.input?.hint ?? "Run provider command",
           }),
         );
+        const userCommandItems = userCommands.map((command) => {
+          const label =
+            command.source === "plugin" && command.namespace
+              ? `/${command.namespace}:${command.name}`
+              : `/${command.name}`;
+          return {
+            id: `user-command:${command.id}`,
+            type: "user-command" as const,
+            command,
+            label,
+            description:
+              command.description ??
+              (command.source === "plugin" ? "Plugin command" : "Custom command"),
+          };
+        });
         const query = composerTrigger.query.trim().toLowerCase();
-        const slashCommandItems = [...builtInSlashCommandItems, ...providerSlashCommandItems];
+        const slashCommandItems = [
+          ...builtInSlashCommandItems,
+          ...providerSlashCommandItems,
+          ...userCommandItems,
+        ];
         if (!query) {
           return slashCommandItems;
         }
@@ -796,6 +852,7 @@ export const ChatComposer = memo(
       searchableModelOptions,
       selectedProvider,
       selectedProviderStatus,
+      userCommands,
       workspaceEntries,
     ]);
 
@@ -1385,12 +1442,32 @@ export const ChatComposer = memo(
             }
             return;
           }
-          void handleInteractionModeChange(item.command === "plan" ? "plan" : "default");
-          const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
-            expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
-          });
-          if (applied) {
-            setComposerHighlightedItemId(null);
+          if (item.command === "plan" || item.command === "default") {
+            void handleInteractionModeChange(item.command);
+            const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
+              expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+            });
+            if (applied) {
+              setComposerHighlightedItemId(null);
+            }
+            return;
+          }
+          const promptTemplates: Partial<Record<typeof item.command, string>> = {
+            review:
+              "Please do a thorough code review of the changes made so far. Look for bugs, edge cases, security issues, and style problems.",
+            compact:
+              "Please summarize what has been accomplished in this conversation so far, then continue.",
+            init: "Please create or update the CLAUDE.md file for this project with relevant instructions, conventions, and context.",
+            help: "What can you help me with? Please list the kinds of tasks you can do in this project.",
+          };
+          const template = promptTemplates[item.command];
+          if (template) {
+            const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, template, {
+              expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+            });
+            if (applied) {
+              setComposerHighlightedItemId(null);
+            }
           }
           return;
         }
@@ -1424,6 +1501,18 @@ export const ChatComposer = memo(
             replacementRangeEnd,
             replacement,
             { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+          );
+          if (applied) {
+            setComposerHighlightedItemId(null);
+          }
+          return;
+        }
+        if (item.type === "user-command") {
+          const applied = applyPromptReplacement(
+            trigger.rangeStart,
+            trigger.rangeEnd,
+            item.command.prompt,
+            { expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd) },
           );
           if (applied) {
             setComposerHighlightedItemId(null);

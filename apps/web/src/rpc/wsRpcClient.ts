@@ -71,6 +71,9 @@ export interface WsRpcClient {
   readonly filesystem: {
     readonly browse: RpcUnaryMethod<typeof WS_METHODS.filesystemBrowse>;
   };
+  readonly userCommands: {
+    readonly list: RpcUnaryNoArgMethod<typeof WS_METHODS.userCommandsList>;
+  };
   readonly shell: {
     readonly openInEditor: (input: {
       readonly cwd: Parameters<LocalApi["shell"]["openInEditor"]>[0];
@@ -150,6 +153,9 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     },
     filesystem: {
       browse: (input) => transport.request((client) => client[WS_METHODS.filesystemBrowse](input)),
+    },
+    userCommands: {
+      list: () => transport.request((client) => client[WS_METHODS.userCommandsList]({})),
     },
     shell: {
       openInEditor: (input) =>

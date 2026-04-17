@@ -19,6 +19,7 @@ import type {
   GitCreateBranchResult,
 } from "./git";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem";
+import type { UserCommandsListResult } from "./userCommands";
 import type {
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -247,6 +248,9 @@ export interface EnvironmentApi {
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;
+  };
+  userCommands: {
+    list: () => Promise<UserCommandsListResult>;
   };
   git: {
     listBranches: (input: GitListBranchesInput) => Promise<GitListBranchesResult>;

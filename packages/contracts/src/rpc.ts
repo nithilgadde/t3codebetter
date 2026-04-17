@@ -72,6 +72,7 @@ import {
   ServerUpsertKeybindingResult,
 } from "./server";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings";
+import { UserCommandsError, UserCommandsListResult } from "./userCommands";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -107,6 +108,9 @@ export const WS_METHODS = {
   terminalClear: "terminal.clear",
   terminalRestart: "terminal.restart",
   terminalClose: "terminal.close",
+
+  // User commands (from ~/.claude)
+  userCommandsList: "userCommands.list",
 
   // Server meta
   serverGetConfig: "server.getConfig",
@@ -173,6 +177,12 @@ export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   payload: FilesystemBrowseInput,
   success: FilesystemBrowseResult,
   error: FilesystemBrowseError,
+});
+
+export const WsUserCommandsListRpc = Rpc.make(WS_METHODS.userCommandsList, {
+  payload: Schema.Struct({}),
+  success: UserCommandsListResult,
+  error: UserCommandsError,
 });
 
 export const WsSubscribeGitStatusRpc = Rpc.make(WS_METHODS.subscribeGitStatus, {
@@ -361,6 +371,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
+  WsUserCommandsListRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,
   WsGitRefreshStatusRpc,

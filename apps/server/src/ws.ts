@@ -18,6 +18,7 @@ import {
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
+  UserCommandsError,
   ThreadId,
   type TerminalEvent,
   WS_METHODS,
@@ -63,6 +64,7 @@ import {
   type SessionCredentialChange,
 } from "./auth/Services/SessionCredentialService";
 import { respondToAuthError } from "./auth/http";
+import { UserCommandsLoader } from "./userCommands/Services/UserCommandsLoader";
 
 function isThreadDetailEvent(event: OrchestrationEvent): event is Extract<
   OrchestrationEvent,
@@ -153,6 +155,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const serverAuth = yield* ServerAuth;
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const sessions = yield* SessionCredentialService;
+      const userCommandsLoader = yield* UserCommandsLoader;
       const serverCommandId = (tag: string) =>
         CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
@@ -819,6 +822,21 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               ),
             ),
             { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.userCommandsList]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.userCommandsList,
+            userCommandsLoader.list().pipe(
+              Effect.map((commands) => ({ commands })),
+              Effect.mapError(
+                (cause) =>
+                  new UserCommandsError({
+                    message: cause.detail,
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "userCommands" },
           ),
         [WS_METHODS.subscribeGitStatus]: (input) =>
           observeRpcStream(

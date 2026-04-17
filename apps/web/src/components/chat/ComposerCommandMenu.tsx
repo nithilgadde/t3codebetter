@@ -3,6 +3,7 @@ import {
   type ProviderKind,
   type ServerProviderSkill,
   type ServerProviderSlashCommand,
+  type UserCommand,
 } from "@t3tools/contracts";
 import { BotIcon } from "lucide-react";
 import { memo, useLayoutEffect, useMemo, useRef } from "react";
@@ -60,6 +61,13 @@ export type ComposerCommandItem =
       skill: ServerProviderSkill;
       label: string;
       description: string;
+    }
+  | {
+      id: string;
+      type: "user-command";
+      command: UserCommand;
+      label: string;
+      description: string;
     };
 
 type ComposerCommandGroup = {
@@ -101,6 +109,12 @@ function groupCommandItems(
 
   const builtInItems = items.filter((item) => item.type === "slash-command");
   const providerItems = items.filter((item) => item.type === "provider-slash-command");
+  const userItems = items.filter(
+    (item) => item.type === "user-command" && item.command.source === "user",
+  );
+  const pluginItems = items.filter(
+    (item) => item.type === "user-command" && item.command.source === "plugin",
+  );
 
   const groups: ComposerCommandGroup[] = [];
   if (builtInItems.length > 0) {
@@ -108,6 +122,12 @@ function groupCommandItems(
   }
   if (providerItems.length > 0) {
     groups.push({ id: "provider", label: "Provider", items: providerItems });
+  }
+  if (userItems.length > 0) {
+    groups.push({ id: "user-commands", label: "Your Commands", items: userItems });
+  }
+  if (pluginItems.length > 0) {
+    groups.push({ id: "plugin-commands", label: "Plugin Commands", items: pluginItems });
   }
   return groups;
 }
@@ -254,6 +274,9 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         <span className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground/80">
           <SkillGlyph className="size-3.5" />
         </span>
+      ) : null}
+      {props.item.type === "user-command" ? (
+        <BotIcon className="size-4 shrink-0 text-muted-foreground/80" />
       ) : null}
       {props.item.type === "model" ? (
         <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
