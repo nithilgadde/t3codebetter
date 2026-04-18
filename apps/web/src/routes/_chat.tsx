@@ -1,6 +1,7 @@
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { Outlet, createFileRoute, redirect, useLocation, useNavigate, useParams } from "@tanstack/react-router";
+import { useCallback, useEffect } from "react";
 
+import { parseScopedThreadKey } from "@t3tools/client-runtime";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import {
@@ -11,6 +12,8 @@ import { isTerminalFocused } from "../lib/terminalFocus";
 import { resolveShortcutCommand } from "../keybindings";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
+import { useUiStateStore } from "../uiStateStore";
+import { resolveThreadRouteRef, buildThreadRouteParams } from "../threadRoutes";
 import { resolveSidebarNewThreadEnvMode } from "~/components/Sidebar.logic";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
@@ -27,6 +30,46 @@ function ChatRouteGlobalShortcuts() {
       : false,
   );
   const appSettings = useSettings();
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (loc) => loc.pathname });
+  const splitParams = useParams({ strict: false });
+  const threadLastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);
+
+  const toggleSplit = useCallback(() => {
+    const onSplitRoute =
+      pathname.startsWith("/split/") &&
+      typeof splitParams.leftEnvironmentId === "string" &&
+      typeof splitParams.leftThreadId === "string";
+    if (onSplitRoute) {
+      const leftRef = resolveThreadRouteRef({
+        environmentId: splitParams.leftEnvironmentId as string,
+        threadId: splitParams.leftThreadId as string,
+      });
+      if (!leftRef) return;
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(leftRef),
+      });
+      return;
+    }
+    if (!routeThreadRef) return;
+    const currentKey = `${routeThreadRef.environmentId}:${routeThreadRef.threadId}`;
+    const candidateKey = Object.entries(threadLastVisitedAtById)
+      .filter(([key]) => key !== currentKey)
+      .sort(([, a], [, b]) => (a < b ? 1 : a > b ? -1 : 0))[0]?.[0];
+    if (!candidateKey) return;
+    const otherRef = parseScopedThreadKey(candidateKey);
+    if (!otherRef) return;
+    void navigate({
+      to: "/split/$leftEnvironmentId/$leftThreadId/$rightEnvironmentId/$rightThreadId",
+      params: {
+        leftEnvironmentId: routeThreadRef.environmentId,
+        leftThreadId: routeThreadRef.threadId,
+        rightEnvironmentId: otherRef.environmentId,
+        rightThreadId: otherRef.threadId,
+      },
+    });
+  }, [navigate, pathname, routeThreadRef, splitParams, threadLastVisitedAtById]);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -45,6 +88,13 @@ function ChatRouteGlobalShortcuts() {
       if (event.key === "Escape" && selectedThreadKeysSize > 0) {
         event.preventDefault();
         clearSelection();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleSplit();
         return;
       }
 
@@ -92,6 +142,7 @@ function ChatRouteGlobalShortcuts() {
     selectedThreadKeysSize,
     terminalOpen,
     appSettings.defaultThreadEnvMode,
+    toggleSplit,
   ]);
 
   return null;

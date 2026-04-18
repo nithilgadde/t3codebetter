@@ -1045,6 +1045,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   }));
   const { updateSettings } = useUpdateSettings();
   const router = useRouter();
+  const splitNavigate = useNavigate();
+  const splitActiveThreadRef = useParams({
+    strict: false,
+    select: (params) => resolveThreadRouteRef(params),
+  });
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
   const toggleProject = useUiStateStore((state) => state.toggleProject);
   const toggleThreadSelection = useThreadSelectionStore((state) => state.toggleThread);
@@ -1917,16 +1922,33 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
       );
       const threadWorkspacePath = thread.worktreePath ?? threadProject?.cwd ?? project.cwd ?? null;
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "rename", label: "Rename thread" },
-          { id: "mark-unread", label: "Mark unread" },
-          { id: "copy-path", label: "Copy Path" },
-          { id: "copy-thread-id", label: "Copy Thread ID" },
-          { id: "delete", label: "Delete", destructive: true },
-        ],
-        position,
-      );
+      const canSplit =
+        splitActiveThreadRef !== null &&
+        scopedThreadKey(splitActiveThreadRef) !== threadKey;
+      const menuItems: ContextMenuItem[] = [
+        { id: "rename", label: "Rename thread" },
+        { id: "mark-unread", label: "Mark unread" },
+        ...(canSplit
+          ? [{ id: "split-with-active", label: "Open in split with current chat" } as const]
+          : []),
+        { id: "copy-path", label: "Copy Path" },
+        { id: "copy-thread-id", label: "Copy Thread ID" },
+        { id: "delete", label: "Delete", destructive: true },
+      ];
+      const clicked = await api.contextMenu.show(menuItems, position);
+
+      if (clicked === "split-with-active" && splitActiveThreadRef) {
+        void splitNavigate({
+          to: "/split/$leftEnvironmentId/$leftThreadId/$rightEnvironmentId/$rightThreadId",
+          params: {
+            leftEnvironmentId: splitActiveThreadRef.environmentId,
+            leftThreadId: splitActiveThreadRef.threadId,
+            rightEnvironmentId: threadRef.environmentId,
+            rightThreadId: threadRef.threadId,
+          },
+        });
+        return;
+      }
 
       if (clicked === "rename") {
         setRenamingThreadKey(threadKey);
@@ -1977,6 +1999,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       markThreadUnread,
       memberProjectByScopedKey,
       project.cwd,
+      splitActiveThreadRef,
+      splitNavigate,
     ],
   );
 
